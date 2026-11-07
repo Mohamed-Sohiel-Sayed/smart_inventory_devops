@@ -1,0 +1,4 @@
+# Where the project is copied on each target
+app_dir: /opt/smart-inventory
+# Port the dashboard is served on
+app_port: 80
