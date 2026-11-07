@@ -1,0 +1,8 @@
+{
+  "name": "alert-service",
+  "version": "0.1.0",
+  "description": "Low-stock alert service",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "dependencies": { "express": "^4.21.2" }
+}

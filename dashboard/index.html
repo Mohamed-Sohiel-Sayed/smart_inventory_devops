@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Smart Inventory</title>
+<style>
+  :root { --bg:#f5f6f8; --card:#fff; --text:#1d2330; --muted:#6b7280; --line:#e3e6eb; --accent:#2563eb; --low:#dc2626; --ok:#16a34a; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, sans-serif; background:var(--bg); color:var(--text); }
+  header { padding:16px 24px; background:var(--card); border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; }
+  header h1 { margin:0; font-size:20px; }
+  #status { font-size:13px; color:var(--muted); }
+  main { max-width:1000px; margin:24px auto; padding:0 16px; display:grid; grid-template-columns: 2fr 1fr; gap:16px; }
+  @media (max-width: 760px) { main { grid-template-columns: 1fr; } }
+  section { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:16px; }
+  h2 { margin:0 0 12px; font-size:16px; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th, td { text-align:left; padding:8px 6px; border-bottom:1px solid var(--line); }
+  tr.low td { color:var(--low); font-weight:600; }
+  button { border:1px solid var(--line); background:#fff; border-radius:4px; padding:4px 10px; cursor:pointer; }
+  button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  form { display:flex; flex-wrap:wrap; gap:8px; margin-top:16px; }
+  input { padding:6px 8px; border:1px solid var(--line); border-radius:4px; }
+  input[name=name] { flex:1; min-width:120px; } input[type=number] { width:90px; }
+  .alert { border-left:4px solid var(--low); padding:8px 10px; margin-bottom:8px; background:#fef2f2; font-size:14px; }
+  .event { font-size:12px; color:var(--muted); padding:4px 0; border-bottom:1px solid var(--line); }
+  .event.RESOLVED b { color:var(--ok); } .event.LOW_STOCK b { color:var(--low); }
+</style>
+</head>
+<body>
+<header><h1>Smart Inventory Dashboard</h1><span id="status">connecting…</span></header>
+<main>
+  <section>
+    <h2>Inventory</h2>
+    <table>
+      <thead><tr><th>Item</th><th>Qty</th><th>Min</th><th>Adjust</th></tr></thead>
+      <tbody id="items"></tbody>
+    </table>
+    <form id="add">
+      <input name="name" placeholder="New item name" required>
+      <input name="quantity" type="number" placeholder="Qty" min="0" value="10">
+      <input name="threshold" type="number" placeholder="Min" min="0" value="5">
+      <button class="primary" type="submit">Add item</button>
+    </form>
+  </section>
+  <section>
+    <h2>Low-stock alerts</h2>
+    <div id="alerts"></div>
+    <h2 style="margin-top:16px">Recent events</h2>
+    <div id="history"></div>
+  </section>
+</main>
+<script>
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+async function adjust(id, delta) {
+  await fetch(`/api/items/${id}/adjust`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ delta }) });
+  refresh();
+}
+
+async function refresh() {
+  try {
+    const items = await (await fetch('/api/items')).json();
+    document.getElementById('items').innerHTML = items.map((i) => `
+      <tr class="${i.quantity <= i.threshold ? 'low' : ''}">
+        <td>${esc(i.name)}</td><td>${i.quantity}</td><td>${i.threshold}</td>
+        <td><button onclick="adjust(${i.id},-1)">−1</button> <button onclick="adjust(${i.id},10)">+10</button></td>
+      </tr>`).join('');
+
+    const { active, history } = await (await fetch('/alerts')).json();
+    document.getElementById('alerts').innerHTML = active.length
+      ? active.map((a) => `<div class="alert">${esc(a.name)}: ${a.quantity} left (min ${a.threshold})</div>`).join('')
+      : '<div class="event">No active alerts</div>';
+    document.getElementById('history').innerHTML = history.slice(0, 10).map((e) =>
+      `<div class="event ${e.event}"><b>${e.event}</b> ${esc(e.name)} · ${new Date(e.resolvedAt || e.raisedAt).toLocaleTimeString()}</div>`).join('');
+
+    document.getElementById('status').textContent = 'live · updated ' + new Date().toLocaleTimeString();
+  } catch (err) {
+    document.getElementById('status').textContent = 'connection error';
+  }
+}
+
+document.getElementById('add').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  await fetch('/api/items', { method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ name: f.get('name'), quantity: +f.get('quantity'), threshold: +f.get('threshold') }) });
+  e.target.reset();
+  refresh();
+});
+
+refresh();
+setInterval(refresh, 5000);
+</script>
+</body>
+</html>
