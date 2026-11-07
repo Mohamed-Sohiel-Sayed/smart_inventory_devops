@@ -10,8 +10,19 @@ const pool = new Pool({
   database: process.env.DB_NAME || 'inventory',
 });
 
+// An idle connection dropping (e.g. a database restart) must not crash the service
+pool.on('error', (err) => console.error('Idle database client error:', err.message));
+
 const app = express();
 app.use(express.json());
+
+// Express 4 does not catch errors thrown in async handlers; without this wrapper
+// a single failed query becomes an unhandled rejection and kills the process.
+const safe = (handler) => (req, res) =>
+  handler(req, res).catch((err) => {
+    console.error(`${req.method} ${req.url} failed:`, err.message);
+    res.status(500).json({ error: 'internal error' });
+  });
 
 // Create the table and seed a few items on first start.
 // Retries because the database container may still be starting.
@@ -44,17 +55,17 @@ async function initDb(retries = 20) {
 
 app.get('/health', (req, res) => res.json({ status: 'ok', service: 'inventory' }));
 
-app.get('/items', async (req, res) => {
+app.get('/items', safe(async (req, res) => {
   const { rows } = await pool.query('SELECT * FROM items ORDER BY id');
   res.json(rows);
-});
+}));
 
-app.get('/items/low', async (req, res) => {
+app.get('/items/low', safe(async (req, res) => {
   const { rows } = await pool.query('SELECT * FROM items WHERE quantity <= threshold ORDER BY id');
   res.json(rows);
-});
+}));
 
-app.post('/items', async (req, res) => {
+app.post('/items', safe(async (req, res) => {
   const { name, quantity = 0, threshold = 5 } = req.body;
   if (!name) return res.status(400).json({ error: 'name is required' });
   const { rows } = await pool.query(
@@ -62,10 +73,10 @@ app.post('/items', async (req, res) => {
     [name, quantity, threshold]
   );
   res.status(201).json(rows[0]);
-});
+}));
 
 // Change stock by a delta, e.g. {"delta": -1} after a sale or {"delta": 10} after restocking.
-app.post('/items/:id/adjust', async (req, res) => {
+app.post('/items/:id/adjust', safe(async (req, res) => {
   const delta = parseInt(req.body.delta, 10);
   if (Number.isNaN(delta)) return res.status(400).json({ error: 'delta must be a number' });
   const { rows } = await pool.query(
@@ -74,12 +85,12 @@ app.post('/items/:id/adjust', async (req, res) => {
   );
   if (rows.length === 0) return res.status(404).json({ error: 'item not found' });
   res.json(rows[0]);
-});
+}));
 
-app.delete('/items/:id', async (req, res) => {
+app.delete('/items/:id', safe(async (req, res) => {
   await pool.query('DELETE FROM items WHERE id = $1', [req.params.id]);
   res.status(204).end();
-});
+}));
 
 initDb().then(() => {
   app.listen(PORT, () => console.log(`Inventory service listening on ${PORT}`));
