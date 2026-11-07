@@ -1,0 +1,6 @@
+.git
+ansible
+k8s
+terraform
+monitoring
+**/node_modules

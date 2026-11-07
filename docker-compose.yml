@@ -1,0 +1,51 @@
+# Runs the whole system: docker compose up -d --build
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: inventory
+      POSTGRES_PASSWORD: inventory
+      POSTGRES_DB: inventory
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U inventory"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  inventory:
+    build: ./services/inventory
+    environment:
+      DB_HOST: db
+      DB_USER: inventory
+      DB_PASSWORD: inventory
+      DB_NAME: inventory
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  alert:
+    build: ./services/alert
+    environment:
+      INVENTORY_URL: http://inventory:3000
+      POLL_SECONDS: "10"
+    depends_on:
+      - inventory
+    restart: unless-stopped
+
+  nginx:
+    build:
+      context: .
+      dockerfile: nginx/Dockerfile
+    ports:
+      - "80:80"
+    depends_on:
+      - inventory
+      - alert
+    restart: unless-stopped
+
+volumes:
+  db-data:
