@@ -1,0 +1,36 @@
+- name: Create application directory
+  file:
+    path: "{{ app_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Copy project files to the target
+  copy:
+    src: "{{ playbook_dir }}/../{{ item }}"
+    dest: "{{ app_dir }}/"
+  loop:
+    - services
+    - dashboard
+    - nginx
+    - docker-compose.yml
+    - .dockerignore
+
+- name: Build images and start containers
+  command: docker compose up -d --build
+  args:
+    chdir: "{{ app_dir }}"
+  register: compose_up
+  changed_when: "'Started' in compose_up.stderr or 'Recreated' in compose_up.stderr or 'Created' in compose_up.stderr"
+
+- name: Wait until the inventory API answers through Nginx
+  uri:
+    url: "http://localhost:{{ app_port }}/api/health"
+    status_code: 200
+  register: health
+  retries: 20
+  delay: 5
+  until: health.status | default(0) == 200
+
+- name: Show where the dashboard is
+  debug:
+    msg: "Dashboard is up at http://{{ ansible_host }}:{{ app_port }}"

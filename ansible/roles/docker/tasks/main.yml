@@ -1,0 +1,47 @@
+# Docker's EL7 repo is archived but still served; "7" is hard-coded because
+# $releasever on CentOS 7 does not match Docker's folder name.
+- name: Add Docker CE repository
+  yum_repository:
+    name: docker-ce-stable
+    description: Docker CE Stable - $basearch
+    baseurl: https://download.docker.com/linux/centos/7/$basearch/stable
+    gpgcheck: yes
+    gpgkey: https://download.docker.com/linux/centos/gpg
+    enabled: yes
+
+- name: Install Docker Engine and Compose plugin
+  yum:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-compose-plugin
+    state: present
+
+- name: Start and enable Docker
+  service:
+    name: docker
+    state: started
+    enabled: yes
+
+- name: Let the login user run docker without sudo
+  user:
+    name: "{{ ansible_user }}"
+    groups: docker
+    append: yes
+
+- name: Check which services are running
+  service_facts:
+
+- name: Open the dashboard port in firewalld (only if firewalld is running)
+  command: firewall-cmd --permanent --add-port={{ app_port }}/tcp
+  register: fw_add
+  changed_when: "'ALREADY_ENABLED' not in (fw_add.stdout + fw_add.stderr)"
+  when:
+    - "'firewalld.service' in ansible_facts.services"
+    - ansible_facts.services['firewalld.service'].state == 'running'
+  notify: Reload firewalld
+
+- name: Apply any pending Docker restart before deploying the app
+  meta: flush_handlers

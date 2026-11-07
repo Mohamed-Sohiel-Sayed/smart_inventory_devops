@@ -1,0 +1,8 @@
+# Main playbook
+#   ansible-playbook site.yml
+- name: Deploy Smart Inventory System
+  hosts: targets
+  become: true
+  roles:
+    - docker   # install and start Docker Engine + Compose
+    - app      # copy the project, build images, start containers, verify

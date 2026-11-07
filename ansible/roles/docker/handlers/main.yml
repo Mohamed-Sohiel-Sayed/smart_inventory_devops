@@ -1,0 +1,9 @@
+- name: Reload firewalld
+  command: firewall-cmd --reload
+  notify: Restart Docker
+
+# Reloading firewalld wipes Docker's iptables rules; restarting Docker restores them
+- name: Restart Docker
+  service:
+    name: docker
+    state: restarted
