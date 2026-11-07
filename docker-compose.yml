@@ -2,6 +2,10 @@
 services:
   db:
     image: postgres:16-alpine
+    # CentOS 7's 3.10 kernel makes Docker's default seccomp filter
+    # block file writes PostgreSQL needs, so it's relaxed for this container only
+    security_opt:
+      - seccomp:unconfined
     environment:
       POSTGRES_USER: inventory
       POSTGRES_PASSWORD: inventory
